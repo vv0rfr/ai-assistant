@@ -78,6 +78,7 @@ def chat():
 
 # 启动应用
 if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
     print("AI智能助手启动中...")
-    print("访问地址: http://localhost:5000")
-    app.run(debug=True, port=5000)
+    print(f"访问地址: http://localhost:{port}")
+    app.run(debug=True, host="0.0.0.0", port=port)
