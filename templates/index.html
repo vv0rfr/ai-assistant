@@ -1,332 +1,705 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI智能问答助手</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+{% extends "base.html" %}
 
-        body {
-            font-family: 'Microsoft YaHei', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
+{% block title %}AI智能助手{% endblock %}
 
-        .chat-container {
-            width: 500px;
-            height: 600px;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
+{% block body %}
+<div class="app-container">
+    <!-- 移动端遮罩层 -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
-        .chat-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            text-align: center;
-            font-size: 20px;
-            font-weight: bold;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+    <!-- 左侧边栏 -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="user-info">
+                <div class="user-avatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div class="user-details">
+                    {% if current_user.is_authenticated %}
+                    <span class="user-nickname" id="userNickname">{{ current_user.nickname }}</span>
+                    <span class="user-phone" id="userPhone">{{ current_user.phone }}</span>
+                    {% else %}
+                    <span class="user-nickname">游客模式</span>
+                    <span class="user-phone" id="guestMode">登录后可保存聊天记录</span>
+                    {% endif %}
+                </div>
+            </div>
+            <button class="new-chat-btn" id="newChatBtn" title="新对话">
+                <i class="fas fa-plus"></i>
+            </button>
+            <button class="sidebar-close-btn" id="sidebarCloseBtn" title="关闭菜单">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
 
-        .clear-btn {
-            background: rgba(255,255,255,0.2);
-            border: none;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 12px;
-            transition: background 0.3s;
-        }
+        <div class="sidebar-search">
+            <i class="fas fa-search"></i>
+            <input type="text" id="searchInput" placeholder="搜索历史对话...">
+        </div>
 
-        .clear-btn:hover {
-            background: rgba(255,255,255,0.3);
-        }
+        <div class="conversations-list" id="conversationsList">
+            <!-- 对话列表将通过JS动态加载 -->
+        </div>
 
-        .chat-messages {
-            flex: 1;
-            padding: 20px;
-            overflow-y: auto;
-            background: #f5f5f5;
-        }
+        <div class="sidebar-footer">
+            {% if current_user.is_authenticated %}
+            <button class="sidebar-btn" id="clearAllBtn" title="清空所有对话">
+                <i class="fas fa-trash-alt"></i>
+                <span>清空对话</span>
+            </button>
+            <button class="sidebar-btn" id="logoutBtn" title="退出登录">
+                <i class="fas fa-sign-out-alt"></i>
+                <span>退出登录</span>
+            </button>
+            {% else %}
+            <a href="{{ url_for('auth.login_page') }}" class="sidebar-btn" title="登录">
+                <i class="fas fa-sign-in-alt"></i>
+                <span>登录 / 注册</span>
+            </a>
+            {% endif %}
+        </div>
+    </aside>
 
-        .message {
-            margin-bottom: 15px;
-            display: flex;
-        }
+    <!-- 主聊天区域 -->
+    <main class="chat-main">
+        <!-- 移动端菜单按钮 -->
+        <button class="mobile-menu-btn" id="mobileMenuBtn">
+            <i class="fas fa-bars"></i>
+        </button>
 
-        .user-message {
-            justify-content: flex-end;
-        }
-
-        .ai-message {
-            justify-content: flex-start;
-        }
-
-        .message-bubble {
-            max-width: 70%;
-            padding: 12px 16px;
-            border-radius: 18px;
-            font-size: 14px;
-            line-height: 1.5;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-
-        .user-message .message-bubble {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-bottom-right-radius: 4px;
-        }
-
-        .ai-message .message-bubble {
-            background: white;
-            color: #333;
-            border-bottom-left-radius: 4px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .chat-input {
-            padding: 20px;
-            background: white;
-            border-top: 1px solid #eee;
-            display: flex;
-            gap: 10px;
-        }
-
-        .chat-input input {
-            flex: 1;
-            padding: 12px 16px;
-            border: 2px solid #eee;
-            border-radius: 25px;
-            font-size: 14px;
-            outline: none;
-            transition: border-color 0.3s;
-        }
-
-        .chat-input input:focus {
-            border-color: #667eea;
-        }
-
-        .chat-input button {
-            padding: 12px 24px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 25px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: transform 0.2s;
-        }
-
-        .chat-input button:hover {
-            transform: scale(1.05);
-        }
-
-        .chat-input button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .typing-indicator {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-            padding: 12px 16px;
-            background: white;
-            border-radius: 18px;
-            border-bottom-left-radius: 4px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-
-        .typing-dot {
-            width: 8px;
-            height: 8px;
-            background: #667eea;
-            border-radius: 50%;
-            animation: typing 1.4s infinite;
-        }
-
-        .typing-dot:nth-child(2) {
-            animation-delay: 0.2s;
-        }
-
-        .typing-dot:nth-child(3) {
-            animation-delay: 0.4s;
-        }
-
-        @keyframes typing {
-            0%, 60%, 100% {
-                transform: translateY(0);
-            }
-            30% {
-                transform: translateY(-10px);
-            }
-        }
-
-        .history-info {
-            text-align: center;
-            padding: 10px;
-            background: #e8f5e9;
-            color: #2e7d32;
-            font-size: 12px;
-        }
-    </style>
-</head>
-<body>
-    <div class="chat-container">
+        <!-- 聊天头部 -->
         <div class="chat-header">
-            <span>AI智能问答助手</span>
-            <button class="clear-btn" onclick="clearHistory()">清空记录</button>
+            <div class="chat-title">
+                <i class="fas fa-robot"></i>
+                <span id="currentChatTitle">新对话</span>
+            </div>
+            <div class="chat-actions">
+                <button class="action-btn" id="weatherBtn" title="查询天气">
+                    <i class="fas fa-cloud-sun"></i>
+                </button>
+                {% if current_user.is_authenticated %}
+                <button class="action-btn" id="renameBtn" title="重命名对话">
+                    <i class="fas fa-edit"></i>
+                </button>
+                {% endif %}
+            </div>
         </div>
 
+        <!-- 聊天消息区域 -->
         <div class="chat-messages" id="chatMessages">
-            <!-- 聊天记录会在这里显示 -->
+            <div class="welcome-message">
+                <div class="welcome-icon">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <h2>你好！我是AI智能助手</h2>
+                <p>我可以帮你：</p>
+                <div class="feature-cards">
+                    <div class="feature-card" onclick="quickAsk('你好，介绍一下你自己')">
+                        <i class="fas fa-comments"></i>
+                        <span>日常聊天</span>
+                    </div>
+                    <div class="feature-card" onclick="quickAsk('北京今天天气怎么样')">
+                        <i class="fas fa-cloud-sun"></i>
+                        <span>天气查询</span>
+                    </div>
+                    <div class="feature-card" onclick="quickAsk('今天适合穿什么衣服')">
+                        <i class="fas fa-tshirt"></i>
+                        <span>穿搭建议</span>
+                    </div>
+                    <div class="feature-card" onclick="quickAsk('今天需要护肤吗')">
+                        <i class="fas fa-spa"></i>
+                        <span>护肤建议</span>
+                    </div>
+                </div>
+                <p class="welcome-hint">试试问我："北京今天天气怎么样？"</p>
+            </div>
         </div>
 
-        <div class="chat-input">
-            <input type="text" id="userInput" placeholder="输入你的问题..." autocomplete="off">
-            <button id="sendBtn" onclick="sendMessage()">发送</button>
+        <!-- 输入区域 -->
+        <div class="chat-input-area">
+            <div class="input-wrapper">
+                <textarea id="messageInput" placeholder="输入消息... (Shift+Enter换行)" rows="1"></textarea>
+                <button class="send-btn" id="sendBtn" title="发送">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+            <div class="input-hint">
+                <span>按 Enter 发送，Shift+Enter 换行</span>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- 天气查询弹窗 -->
+<div class="modal" id="weatherModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>查询天气</h3>
+            <button class="modal-close" id="closeWeatherModal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="weather-input-group">
+                <input type="text" id="weatherCityInput" placeholder="请输入城市名称，如：北京">
+                <button id="queryWeatherBtn">查询</button>
+            </div>
         </div>
     </div>
+</div>
 
-    <script>
-        // 获取DOM元素
-        const chatMessages = document.getElementById('chatMessages');
-        const userInput = document.getElementById('userInput');
-        const sendBtn = document.getElementById('sendBtn');
+<!-- 重命名弹窗 -->
+<div class="modal" id="renameModal">
+    <div class="modal-content modal-sm">
+        <div class="modal-header">
+            <h3>重命名对话</h3>
+            <button class="modal-close" id="closeRenameModal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="text" id="renameInput" placeholder="请输入新标题">
+            <div class="modal-actions">
+                <button class="btn-cancel" id="cancelRename">取消</button>
+                <button class="btn-confirm" id="confirmRename">确定</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
 
-        // 历史记录存储
-        let chatHistory = JSON.parse(localStorage.getItem('chatHistory')) || [];
+{% block extra_js %}
+<script>
+// 全局状态
+const IS_LOGGED_IN = {{ 'true' if current_user.is_authenticated else 'false' }};
+let currentConversationId = null;
+let conversations = [];
+let chatHistory = []; // 游客模式的上下文历史
 
-        // 页面加载时显示历史记录
-        window.onload = function() {
-            displayHistory();
-        };
+// DOM元素
+const chatMessages = document.getElementById('chatMessages');
+const messageInput = document.getElementById('messageInput');
+const sendBtn = document.getElementById('sendBtn');
+const conversationsList = document.getElementById('conversationsList');
+const newChatBtn = document.getElementById('newChatBtn');
+const currentChatTitle = document.getElementById('currentChatTitle');
+const searchInput = document.getElementById('searchInput');
 
-        // 按回车键发送消息
-        userInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                sendMessage();
+// 初始化
+document.addEventListener('DOMContentLoaded', function() {
+    if (IS_LOGGED_IN) {
+        loadConversations();
+    } else {
+        // 游客模式：显示提示
+        conversationsList.innerHTML = '<div class="empty-conversations"><i class="fas fa-user-clock"></i><p>登录后可保存聊天记录</p></div>';
+    }
+    setupEventListeners();
+    autoResizeTextarea();
+});
+
+// 设置事件监听
+function setupEventListeners() {
+    // 发送消息
+    sendBtn.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    });
+
+    // 新建对话（仅登录用户）
+    newChatBtn.addEventListener('click', function() {
+        if (!IS_LOGGED_IN) {
+            alert('请先登录后再创建对话');
+            return;
+        }
+        createNewConversation();
+    });
+
+    // 搜索对话
+    searchInput.addEventListener('input', function() {
+        filterConversations(this.value);
+    });
+
+    // 移动端菜单 - 打开侧边栏
+    document.getElementById('mobileMenuBtn').addEventListener('click', function(e) {
+        e.stopPropagation();
+        document.getElementById('sidebar').classList.toggle('active');
+        document.getElementById('sidebarOverlay').classList.toggle('active');
+    });
+
+    // 关闭侧边栏按钮
+    document.getElementById('sidebarCloseBtn').addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        closeSidebar();
+    });
+
+    // 点击遮罩层关闭侧边栏
+    document.getElementById('sidebarOverlay').addEventListener('click', function() {
+        closeSidebar();
+    });
+
+    // 点击sidebar外部任意位置关闭侧边栏（document级别）
+    document.addEventListener('click', function(e) {
+        const sidebar = document.getElementById('sidebar');
+        if (!sidebar.classList.contains('active')) return;
+        // 如果点击的不是sidebar内部，也不是菜单按钮，关闭侧边栏
+        if (!e.target.closest('.sidebar') && !e.target.closest('#mobileMenuBtn')) {
+            closeSidebar();
+        }
+    });
+
+    // 关闭侧边栏的统一函数
+    function closeSidebar() {
+        document.getElementById('sidebar').classList.remove('active');
+        document.getElementById('sidebarOverlay').classList.remove('active');
+    }
+
+    // 退出登录（仅登录用户）
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', logout);
+    }
+
+    // 清空所有对话（仅登录用户）
+    const clearAllBtn = document.getElementById('clearAllBtn');
+    if (clearAllBtn) {
+        clearAllBtn.addEventListener('click', clearAllConversations);
+    }
+
+    // 天气查询
+    document.getElementById('weatherBtn').addEventListener('click', function() {
+        document.getElementById('weatherModal').style.display = 'flex';
+    });
+    document.getElementById('closeWeatherModal').addEventListener('click', function() {
+        document.getElementById('weatherModal').style.display = 'none';
+    });
+    document.getElementById('queryWeatherBtn').addEventListener('click', queryWeather);
+    document.getElementById('weatherCityInput').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') queryWeather();
+    });
+
+    // 重命名对话（仅登录用户）
+    const renameBtn = document.getElementById('renameBtn');
+    if (renameBtn) {
+        renameBtn.addEventListener('click', function() {
+            if (!currentConversationId) return;
+            document.getElementById('renameModal').style.display = 'flex';
+            document.getElementById('renameInput').value = currentChatTitle.textContent;
+            document.getElementById('renameInput').focus();
+        });
+    }
+    document.getElementById('closeRenameModal').addEventListener('click', function() {
+        document.getElementById('renameModal').style.display = 'none';
+    });
+    document.getElementById('cancelRename').addEventListener('click', function() {
+        document.getElementById('renameModal').style.display = 'none';
+    });
+    document.getElementById('confirmRename').addEventListener('click', renameConversation);
+
+    // 点击弹窗外部关闭
+    window.addEventListener('click', function(e) {
+        if (e.target.classList.contains('modal')) {
+            e.target.style.display = 'none';
+        }
+    });
+}
+
+// 加载对话列表
+async function loadConversations() {
+    try {
+        const response = await fetch('/api/conversations');
+        if (response.status === 401) return; // 未登录
+        const data = await response.json();
+        if (data.success) {
+            conversations = data.conversations;
+            renderConversations(conversations);
+        }
+    } catch (error) {
+        console.error('加载对话列表失败:', error);
+    }
+}
+
+// 渲染对话列表
+function renderConversations(convs) {
+    conversationsList.innerHTML = '';
+    if (convs.length === 0) {
+        conversationsList.innerHTML = '<div class="empty-conversations"><i class="fas fa-comments"></i><p>暂无对话记录</p></div>';
+        return;
+    }
+    convs.forEach(conv => {
+        const item = document.createElement('div');
+        item.className = `conversation-item ${conv.id === currentConversationId ? 'active' : ''}`;
+        item.dataset.id = conv.id;
+        item.innerHTML = `
+            <div class="conversation-content" onclick="loadConversation(${conv.id})">
+                <i class="fas fa-comment-dots"></i>
+                <div class="conversation-info">
+                    <span class="conversation-title">${escapeHtml(conv.title)}</span>
+                    <span class="conversation-meta">${conv.message_count} 条消息 · ${conv.updated_at}</span>
+                </div>
+            </div>
+            <button class="delete-conv-btn" onclick="event.stopPropagation(); deleteConversation(${conv.id})" title="删除">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        conversationsList.appendChild(item);
+    });
+}
+
+// 过滤对话
+function filterConversations(keyword) {
+    if (!keyword) { renderConversations(conversations); return; }
+    const filtered = conversations.filter(conv => conv.title.toLowerCase().includes(keyword.toLowerCase()));
+    renderConversations(filtered);
+}
+
+// 创建新对话
+async function createNewConversation() {
+    try {
+        const response = await fetch('/api/conversations', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: '新对话' })
+        });
+        const data = await response.json();
+        if (data.success) {
+            currentConversationId = data.conversation.id;
+            currentChatTitle.textContent = '新对话';
+            clearChat();
+            addWelcomeMessage();
+            await loadConversations();
+        }
+    } catch (error) {
+        console.error('创建对话失败:', error);
+    }
+}
+
+// 加载对话
+async function loadConversation(convId) {
+    try {
+        const response = await fetch(`/api/conversations/${convId}`);
+        const data = await response.json();
+        if (data.success) {
+            currentConversationId = convId;
+            currentChatTitle.textContent = data.conversation.title;
+            clearChat();
+            data.messages.forEach(msg => addMessage(msg.role, msg.content, false));
+            document.querySelectorAll('.conversation-item').forEach(item => {
+                item.classList.toggle('active', parseInt(item.dataset.id) === convId);
+            });
+            document.getElementById('sidebar').classList.remove('active');
+            document.getElementById('sidebarOverlay').classList.remove('active');
+        }
+    } catch (error) {
+        console.error('加载对话失败:', error);
+    }
+}
+
+// 删除对话
+async function deleteConversation(convId) {
+    if (!confirm('确定要删除这个对话吗？')) return;
+    try {
+        const response = await fetch(`/api/conversations/${convId}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (data.success) {
+            if (currentConversationId === convId) {
+                currentConversationId = null;
+                clearChat();
+                addWelcomeMessage();
+                currentChatTitle.textContent = '新对话';
             }
+            await loadConversations();
+        }
+    } catch (error) {
+        console.error('删除对话失败:', error);
+    }
+}
+
+// 清空所有对话
+async function clearAllConversations() {
+    if (!confirm('确定要清空所有对话记录吗？此操作不可恢复。')) return;
+    for (const conv of conversations) {
+        await fetch(`/api/conversations/${conv.id}`, { method: 'DELETE' });
+    }
+    currentConversationId = null;
+    clearChat();
+    addWelcomeMessage();
+    currentChatTitle.textContent = '新对话';
+    await loadConversations();
+}
+
+// 重命名对话
+async function renameConversation() {
+    const newTitle = document.getElementById('renameInput').value.trim();
+    if (!newTitle || !currentConversationId) return;
+    try {
+        const response = await fetch(`/api/conversations/${currentConversationId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: newTitle })
+        });
+        const data = await response.json();
+        if (data.success) {
+            currentChatTitle.textContent = newTitle;
+            document.getElementById('renameModal').style.display = 'none';
+            await loadConversations();
+        }
+    } catch (error) {
+        console.error('重命名失败:', error);
+    }
+}
+
+// 发送消息 - 支持流式输出
+async function sendMessage() {
+    const message = messageInput.value.trim();
+    if (!message) return;
+
+    // 登录用户：如果没有对话，先创建
+    if (IS_LOGGED_IN && !currentConversationId) {
+        await createNewConversation();
+    }
+
+    // 清除欢迎消息
+    const welcomeMsg = chatMessages.querySelector('.welcome-message');
+    if (welcomeMsg) welcomeMsg.remove();
+
+    // 添加用户消息
+    addMessage('user', message);
+    messageInput.value = '';
+    messageInput.style.height = 'auto';
+
+    // 记录用户消息到上下文历史
+    chatHistory.push({ role: 'user', content: message });
+    if (chatHistory.length > 20) chatHistory.shift(); // 限制20条
+
+    // 构建请求体
+    const requestBody = {
+        message: message,
+        conversation_id: IS_LOGGED_IN ? currentConversationId : null
+    };
+    // 游客模式带上上下文
+    if (!IS_LOGGED_IN && chatHistory.length > 1) {
+        requestBody.context = chatHistory.slice(0, -1); // 除当前消息外的历史
+    }
+
+    // 显示加载状态
+    const loadingId = addLoadingMessage();
+
+    try {
+        const response = await fetch('/api/chat/stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
         });
 
-        // 显示历史记录
-        function displayHistory() {
-            if (chatHistory.length === 0) {
-                // 显示欢迎消息
-                appendMessage('ai', '你好！我是AI智能助手，有什么可以帮你的吗？');
-            } else {
-                // 显示历史记录
-                chatHistory.forEach(msg => {
-                    appendMessage(msg.role, msg.content, false);
-                });
+        const contentType = response.headers.get('content-type') || '';
+
+        // 天气查询等非流式 → JSON响应
+        if (contentType.includes('application/json')) {
+            removeLoadingMessage(loadingId);
+            const data = await response.json();
+            const reply = data.success ? data.ai_response : ('抱歉：' + (data.message || '未知错误'));
+            addMessage('assistant', reply);
+            // 记录上下文
+            if (!IS_LOGGED_IN && data.success) {
+                chatHistory.push({ role: 'assistant', content: reply });
+                if (chatHistory.length > 20) chatHistory.shift();
+            }
+            if (IS_LOGGED_IN) await loadConversations();
+            return;
+        }
+
+        // 流式响应：用真实消息替换加载动画
+        removeLoadingMessage(loadingId);
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message assistant';
+        const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+        const msgId = 'stream-' + Date.now();
+        messageDiv.innerHTML = `
+            <div class="message-avatar">🤖</div>
+            <div class="message-content">
+                <div class="message-bubble streaming" id="${msgId}"></div>
+                <div class="message-time">${time}</div>
+            </div>
+        `;
+        chatMessages.appendChild(messageDiv);
+        scrollToBottom();
+
+        const bubble = document.getElementById(msgId);
+        let fullContent = '';
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || ''; // 保留未完成的行
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const dataStr = line.substring(6).trim();
+                    if (dataStr === '[DONE]') continue;
+                    try {
+                        const parsed = JSON.parse(dataStr);
+                        if (parsed.content) {
+                            fullContent += parsed.content;
+                            bubble.innerHTML = formatMarkdown(fullContent);
+                            scrollToBottom();
+                        } else if (parsed.error) {
+                            bubble.textContent = '抱歉：' + parsed.error;
+                        }
+                    } catch (e) { /* skip partial JSON */ }
+                }
             }
         }
 
-        // 发送消息函数
-        async function sendMessage() {
-            const message = userInput.value.trim();
-            if (!message) return;
-
-            // 禁用输入和按钮
-            userInput.disabled = true;
-            sendBtn.disabled = true;
-
-            // 显示用户消息
-            appendMessage('user', message);
-            userInput.value = '';
-
-            // 保存到历史记录
-            chatHistory.push({ role: 'user', content: message });
-            saveHistory();
-
-            // 显示loading动画
-            const typingDiv = document.createElement('div');
-            typingDiv.className = 'message ai-message';
-            typingDiv.innerHTML = `
-                <div class="typing-indicator">
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
-                </div>
-            `;
-            chatMessages.appendChild(typingDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-
-            try {
-                // 调用后端API
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ message: message })
-                });
-
-                const data = await response.json();
-
-                // 移除loading动画
-                chatMessages.removeChild(typingDiv);
-
-                // 显示AI回复
-                appendMessage('ai', data.ai_response);
-
-                // 保存到历史记录
-                chatHistory.push({ role: 'ai', content: data.ai_response });
-                saveHistory();
-
-            } catch (error) {
-                // 移除loading动画
-                chatMessages.removeChild(typingDiv);
-                appendMessage('ai', '抱歉，出现了错误，请重试。');
-                console.error('Error:', error);
-            }
-
-            // 启用输入和按钮
-            userInput.disabled = false;
-            sendBtn.disabled = false;
-            userInput.focus();
-        }
-
-        // 添加消息到聊天窗口
-        function appendMessage(type, content, saveToHistory = true) {
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${type}-message`;
-            messageDiv.innerHTML = `<div class="message-bubble">${content}</div>`;
-            chatMessages.appendChild(messageDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }
-
-        // 保存历史记录到localStorage
-        function saveHistory() {
-            localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
-        }
-
-        // 清空历史记录
-        function clearHistory() {
-            if (confirm('确定要清空所有聊天记录吗？')) {
-                chatHistory = [];
-                saveHistory();
-                chatMessages.innerHTML = '';
-                appendMessage('ai', '你好！我是AI智能助手，有什么可以帮你的吗？');
+        // 处理buffer中剩余的数据
+        if (buffer.startsWith('data: ')) {
+            const dataStr = buffer.substring(6).trim();
+            if (dataStr !== '[DONE]') {
+                try {
+                    const parsed = JSON.parse(dataStr);
+                    if (parsed.content) {
+                        fullContent += parsed.content;
+                        bubble.innerHTML = formatMarkdown(fullContent);
+                    }
+                } catch (e) {}
             }
         }
-    </script>
-</body>
-</html>
+
+        // 流式完成，移除光标动画
+        bubble.classList.remove('streaming');
+
+        // 记录AI回复到上下文历史
+        if (!IS_LOGGED_IN && fullContent) {
+            chatHistory.push({ role: 'assistant', content: fullContent });
+            if (chatHistory.length > 20) chatHistory.shift();
+        }
+
+        // 刷新对话列表
+        if (IS_LOGGED_IN) {
+            await loadConversations();
+        }
+
+    } catch (error) {
+        removeLoadingMessage(loadingId);
+        console.error('发送消息失败:', error);
+        addMessage('assistant', '网络错误，请检查应用是否已启动。');
+    }
+}
+
+// 添加消息
+function addMessage(role, content, scroll = true) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${role}`;
+    const avatar = role === 'user' ? '👤' : '🤖';
+    const time = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    const formattedContent = formatMarkdown(content);
+    messageDiv.innerHTML = `
+        <div class="message-avatar">${avatar}</div>
+        <div class="message-content">
+            <div class="message-bubble">${formattedContent}</div>
+            <div class="message-time">${time}</div>
+        </div>
+    `;
+    chatMessages.appendChild(messageDiv);
+    if (scroll) scrollToBottom();
+}
+
+// 添加加载消息
+function addLoadingMessage() {
+    const id = 'loading-' + Date.now();
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'message assistant';
+    messageDiv.id = id;
+    messageDiv.innerHTML = `
+        <div class="message-avatar">🤖</div>
+        <div class="message-content">
+            <div class="message-bubble loading">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            </div>
+        </div>
+    `;
+    chatMessages.appendChild(messageDiv);
+    scrollToBottom();
+    return id;
+}
+
+function removeLoadingMessage(id) {
+    const element = document.getElementById(id);
+    if (element) element.remove();
+}
+
+function clearChat() { chatMessages.innerHTML = ''; }
+
+function addWelcomeMessage() {
+    chatMessages.innerHTML = `
+        <div class="welcome-message">
+            <div class="welcome-icon"><i class="fas fa-robot"></i></div>
+            <h2>你好！我是AI智能助手</h2>
+            <p>我可以帮你：</p>
+            <div class="feature-cards">
+                <div class="feature-card" onclick="quickAsk('你好，介绍一下你自己')"><i class="fas fa-comments"></i><span>日常聊天</span></div>
+                <div class="feature-card" onclick="quickAsk('北京今天天气怎么样')"><i class="fas fa-cloud-sun"></i><span>天气查询</span></div>
+                <div class="feature-card" onclick="quickAsk('今天适合穿什么衣服')"><i class="fas fa-tshirt"></i><span>穿搭建议</span></div>
+                <div class="feature-card" onclick="quickAsk('今天需要护肤吗')"><i class="fas fa-spa"></i><span>护肤建议</span></div>
+            </div>
+            <p class="welcome-hint">试试问我："北京今天天气怎么样？"</p>
+        </div>
+    `;
+}
+
+// 查询天气
+async function queryWeather() {
+    const city = document.getElementById('weatherCityInput').value.trim();
+    if (!city) return;
+    messageInput.value = `${city}天气怎么样？`;
+    document.getElementById('weatherModal').style.display = 'none';
+    await sendMessage();
+}
+
+// 退出登录
+async function logout() {
+    try {
+        await fetch('/api/logout', { method: 'POST' });
+        window.location.href = '/login';
+    } catch (error) {
+        console.error('退出失败:', error);
+    }
+}
+
+function scrollToBottom() { chatMessages.scrollTop = chatMessages.scrollHeight; }
+
+function autoResizeTextarea() {
+    messageInput.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 150) + 'px';
+    });
+}
+
+function formatMarkdown(text) {
+    return text
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`(.*?)`/g, '<code>$1</code>')
+        .replace(/\n/g, '<br>');
+}
+
+// 快速提问
+function quickAsk(text) {
+    messageInput.value = text;
+    messageInput.focus();
+    sendMessage();
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+</script>
+{% endblock %}

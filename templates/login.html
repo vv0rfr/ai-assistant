@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}登录 - AI智能助手{% endblock %}
+
+{% block body %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <div class="auth-logo">
+                <i class="fas fa-robot"></i>
+            </div>
+            <h1>AI智能助手</h1>
+            <p>登录后开始聊天</p>
+        </div>
+
+        <form id="loginForm" class="auth-form">
+            <div class="form-group">
+                <div class="input-wrapper">
+                    <i class="fas fa-phone"></i>
+                    <input type="tel" id="phone" name="phone" placeholder="请输入手机号" maxlength="11" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <div class="input-wrapper code-input-wrapper">
+                    <i class="fas fa-shield-alt"></i>
+                    <input type="text" id="code" name="code" placeholder="请输入验证码" maxlength="6" required>
+                    <button type="button" id="sendCodeBtn" class="send-code-btn">获取验证码</button>
+                </div>
+            </div>
+
+            <button type="submit" class="auth-submit-btn">
+                <span class="btn-text">登录</span>
+                <span class="btn-loading" style="display: none;">
+                    <i class="fas fa-spinner fa-spin"></i> 登录中...
+                </span>
+            </button>
+        </form>
+
+        <div class="auth-footer">
+            <p>还没有账号？<a href="{{ url_for('auth.register_page') }}">立即注册</a></p>
+        </div>
+
+        <div id="message" class="auth-message" style="display: none;"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const loginForm = document.getElementById('loginForm');
+    const sendCodeBtn = document.getElementById('sendCodeBtn');
+    const messageDiv = document.getElementById('message');
+
+    // 发送验证码
+    sendCodeBtn.addEventListener('click', async function() {
+        const phone = document.getElementById('phone').value.trim();
+
+        if (!phone) {
+            showMessage('请输入手机号', 'error');
+            return;
+        }
+
+        if (!/^1[3-9]\d{9}$/.test(phone)) {
+            showMessage('手机号格式不正确', 'error');
+            return;
+        }
+
+        sendCodeBtn.disabled = true;
+        sendCodeBtn.textContent = '发送中...';
+
+        try {
+            const response = await fetch('/api/send-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showMessage(data.message, 'success');
+                startCountdown();
+            } else {
+                showMessage(data.message, 'error');
+                sendCodeBtn.disabled = false;
+                sendCodeBtn.textContent = '获取验证码';
+            }
+        } catch (error) {
+            showMessage('网络错误，请稍后重试', 'error');
+            sendCodeBtn.disabled = false;
+            sendCodeBtn.textContent = '获取验证码';
+        }
+    });
+
+    // 登录表单提交
+    loginForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+
+        const phone = document.getElementById('phone').value.trim();
+        const code = document.getElementById('code').value.trim();
+
+        if (!phone || !code) {
+            showMessage('请填写手机号和验证码', 'error');
+            return;
+        }
+
+        const submitBtn = loginForm.querySelector('.auth-submit-btn');
+        submitBtn.querySelector('.btn-text').style.display = 'none';
+        submitBtn.querySelector('.btn-loading').style.display = 'inline-flex';
+        submitBtn.disabled = true;
+
+        try {
+            const response = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone, code })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showMessage('登录成功，正在跳转...', 'success');
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 1000);
+            } else {
+                showMessage(data.message, 'error');
+                submitBtn.querySelector('.btn-text').style.display = 'inline';
+                submitBtn.querySelector('.btn-loading').style.display = 'none';
+                submitBtn.disabled = false;
+            }
+        } catch (error) {
+            showMessage('网络错误，请稍后重试', 'error');
+            submitBtn.querySelector('.btn-text').style.display = 'inline';
+            submitBtn.querySelector('.btn-loading').style.display = 'none';
+            submitBtn.disabled = false;
+        }
+    });
+
+    // 倒计时
+    function startCountdown() {
+        let seconds = 60;
+        const timer = setInterval(() => {
+            seconds--;
+            sendCodeBtn.textContent = `${seconds}秒后重试`;
+
+            if (seconds <= 0) {
+                clearInterval(timer);
+                sendCodeBtn.disabled = false;
+                sendCodeBtn.textContent = '获取验证码';
+            }
+        }, 1000);
+    }
+
+    // 显示消息
+    function showMessage(text, type) {
+        messageDiv.textContent = text;
+        messageDiv.className = `auth-message ${type}`;
+        messageDiv.style.display = 'block';
+
+        setTimeout(() => {
+            messageDiv.style.display = 'none';
+        }, 3000);
+    }
+});
+</script>
+{% endblock %}
