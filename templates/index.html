@@ -74,6 +74,9 @@
                 <span id="currentChatTitle">新对话</span>
             </div>
             <div class="chat-actions">
+                <button class="action-btn" id="documentBtn" title="文档问答">
+                    <i class="fas fa-file-alt"></i>
+                </button>
                 <button class="action-btn" id="weatherBtn" title="查询天气">
                     <i class="fas fa-cloud-sun"></i>
                 </button>
@@ -110,6 +113,10 @@
                         <i class="fas fa-spa"></i>
                         <span>护肤建议</span>
                     </div>
+                    <div class="feature-card" onclick="openDocumentModal()">
+                        <i class="fas fa-file-alt"></i>
+                        <span>文档问答</span>
+                    </div>
                 </div>
                 <p class="welcome-hint">试试问我："北京今天天气怎么样？"</p>
             </div>
@@ -126,8 +133,70 @@
             <div class="input-hint">
                 <span>按 Enter 发送，Shift+Enter 换行</span>
             </div>
+            <div class="input-chips">
+                <span class="input-chip" onclick="quickAsk('你好，介绍一下你自己')">💬 日常聊天</span>
+                <span class="input-chip" onclick="quickAsk('北京今天天气怎么样')">🌤️ 天气查询</span>
+                <span class="input-chip" onclick="quickAsk('今天适合穿什么衣服')">👗 穿搭建议</span>
+                <span class="input-chip" onclick="quickAsk('今天需要护肤吗')">✨ 护肤建议</span>
+                <span class="input-chip" onclick="openDocumentModal()">📄 文档问答</span>
+            </div>
         </div>
     </main>
+</div>
+
+<!-- 文档问答弹窗 -->
+<div class="modal" id="documentModal">
+    <div class="modal-content modal-lg">
+        <div class="modal-header">
+            <h3><i class="fas fa-file-alt"></i> 文档问答</h3>
+            <button class="modal-close" id="closeDocumentModal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="document-upload-area" id="uploadArea">
+                <div class="upload-icon">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                </div>
+                <p>拖拽文件到此处，或点击选择文件</p>
+                <p class="upload-hint">支持 PDF、Word、TXT 格式，最大 10MB</p>
+                <input type="file" id="fileInput" accept=".pdf,.docx,.txt" style="display: none;">
+            </div>
+
+            <div class="document-info" id="documentInfo" style="display: none;">
+                <div class="doc-header">
+                    <i class="fas fa-file"></i>
+                    <span id="docFileName"></span>
+                    <button class="btn-remove" id="removeDocBtn" title="移除文档">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="doc-stats" id="docStats"></div>
+                <div class="doc-preview" id="docPreview"></div>
+            </div>
+
+            <div class="document-actions" id="documentActions" style="display: none;">
+                <button class="btn-summarize" id="summarizeBtn">
+                    <i class="fas fa-magic"></i> 自动总结
+                </button>
+            </div>
+
+            <div class="document-qa" id="documentQA" style="display: none;">
+                <div class="qa-input-group">
+                    <input type="text" id="docQuestionInput" placeholder="基于文档内容提问...">
+                    <button class="btn-ask" id="askDocBtn">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="document-result" id="documentResult" style="display: none;">
+                <div class="result-header">
+                    <i class="fas fa-robot"></i>
+                    <span>AI 分析结果</span>
+                </div>
+                <div class="result-content" id="resultContent"></div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- 天气查询弹窗 -->
@@ -700,6 +769,207 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// ========== 文档问答功能 ==========
+
+let currentDocumentText = '';
+
+function openDocumentModal() {
+    document.getElementById('documentModal').style.display = 'flex';
+    resetDocumentModal();
+}
+
+function resetDocumentModal() {
+    currentDocumentText = '';
+    document.getElementById('uploadArea').style.display = 'block';
+    document.getElementById('documentInfo').style.display = 'none';
+    document.getElementById('documentActions').style.display = 'none';
+    document.getElementById('documentQA').style.display = 'none';
+    document.getElementById('documentResult').style.display = 'none';
+    document.getElementById('fileInput').value = '';
+}
+
+// 文件上传区域事件
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadArea = document.getElementById('uploadArea');
+    const fileInput = document.getElementById('fileInput');
+    const closeDocumentModal = document.getElementById('closeDocumentModal');
+    const removeDocBtn = document.getElementById('removeDocBtn');
+    const summarizeBtn = document.getElementById('summarizeBtn');
+    const askDocBtn = document.getElementById('askDocBtn');
+    const docQuestionInput = document.getElementById('docQuestionInput');
+
+    if (closeDocumentModal) {
+        closeDocumentModal.addEventListener('click', function() {
+            document.getElementById('documentModal').style.display = 'none';
+        });
+    }
+
+    if (uploadArea) {
+        uploadArea.addEventListener('click', function() {
+            fileInput.click();
+        });
+
+        uploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFileUpload(files[0]);
+            }
+        });
+    }
+
+    if (fileInput) {
+        fileInput.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                handleFileUpload(this.files[0]);
+            }
+        });
+    }
+
+    if (removeDocBtn) {
+        removeDocBtn.addEventListener('click', resetDocumentModal);
+    }
+
+    if (summarizeBtn) {
+        summarizeBtn.addEventListener('click', summarizeDocument);
+    }
+
+    if (askDocBtn) {
+        askDocBtn.addEventListener('click', askAboutDocument);
+    }
+
+    if (docQuestionInput) {
+        docQuestionInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                askAboutDocument();
+            }
+        });
+    }
+});
+
+async function handleFileUpload(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const uploadArea = document.getElementById('uploadArea');
+    uploadArea.innerHTML = '<div class="upload-loading"><i class="fas fa-spinner fa-spin"></i> 正在解析文档...</div>';
+
+    try {
+        const response = await fetch('/api/document/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            currentDocumentText = data.full_text;
+            document.getElementById('docFileName').textContent = data.filename;
+            document.getElementById('docStats').innerHTML = `
+                <span><i class="fas fa-font"></i> ${data.stats.char_count} 字符</span>
+                <span><i class="fas fa-file-word"></i> ${data.stats.word_count} 词</span>
+                <span><i class="fas fa-align-left"></i> ${data.stats.line_count} 行</span>
+            `;
+            document.getElementById('docPreview').textContent = data.text_preview;
+
+            document.getElementById('uploadArea').style.display = 'none';
+            document.getElementById('documentInfo').style.display = 'block';
+            document.getElementById('documentActions').style.display = 'flex';
+            document.getElementById('documentQA').style.display = 'block';
+        } else {
+            alert(data.message || '上传失败');
+            uploadArea.innerHTML = `
+                <div class="upload-icon"><i class="fas fa-cloud-upload-alt"></i></div>
+                <p>拖拽文件到此处，或点击选择文件</p>
+                <p class="upload-hint">支持 PDF、Word、TXT 格式，最大 10MB</p>
+            `;
+        }
+    } catch (error) {
+        console.error('上传失败:', error);
+        alert('上传失败，请稍后重试');
+        uploadArea.innerHTML = `
+            <div class="upload-icon"><i class="fas fa-cloud-upload-alt"></i></div>
+            <p>拖拽文件到此处，或点击选择文件</p>
+            <p class="upload-hint">支持 PDF、Word、TXT 格式，最大 10MB</p>
+        `;
+    }
+}
+
+async function summarizeDocument() {
+    if (!currentDocumentText) return;
+
+    const resultDiv = document.getElementById('documentResult');
+    const resultContent = document.getElementById('resultContent');
+
+    resultDiv.style.display = 'block';
+    resultContent.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> 正在分析文档...</div>';
+
+    try {
+        const response = await fetch('/api/document/summarize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ document_text: currentDocumentText })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            resultContent.innerHTML = formatMarkdown(data.summary);
+        } else {
+            resultContent.innerHTML = '<p class="error">分析失败：' + (data.message || '未知错误') + '</p>';
+        }
+    } catch (error) {
+        console.error('总结失败:', error);
+        resultContent.innerHTML = '<p class="error">网络错误，请稍后重试</p>';
+    }
+}
+
+async function askAboutDocument() {
+    const question = document.getElementById('docQuestionInput').value.trim();
+    if (!question || !currentDocumentText) return;
+
+    const resultDiv = document.getElementById('documentResult');
+    const resultContent = document.getElementById('resultContent');
+
+    resultDiv.style.display = 'block';
+    resultContent.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> 正在分析...</div>';
+
+    try {
+        const response = await fetch('/api/document/qa', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                question: question,
+                document_text: currentDocumentText
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            resultContent.innerHTML = formatMarkdown(data.answer);
+        } else {
+            resultContent.innerHTML = '<p class="error">回答失败：' + (data.message || '未知错误') + '</p>';
+        }
+    } catch (error) {
+        console.error('问答失败:', error);
+        resultContent.innerHTML = '<p class="error">网络错误，请稍后重试</p>';
+    }
+
+    document.getElementById('docQuestionInput').value = '';
 }
 </script>
 {% endblock %}

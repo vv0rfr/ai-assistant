@@ -30,6 +30,9 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 
+# Flask 实例文件夹（包含数据库等敏感数据）
+instance/
+
 # 日志
 *.log
 
@@ -42,3 +45,8 @@ build/
 # 临时文件
 *.tmp
 *.temp
+
+# 测试文件
+test*.txt
+r*.txt
+result*.txt
